@@ -2,12 +2,17 @@ package life.bhw.conmmunity.controller;
 
 import life.bhw.conmmunity.dto.AccessTokenDTO;
 import life.bhw.conmmunity.dto.GitHubUser;
+import life.bhw.conmmunity.entity.User;
 import life.bhw.conmmunity.provider.GitHubProvider;
+import life.bhw.conmmunity.service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+
+import javax.servlet.http.HttpServletRequest;
+import java.util.UUID;
 
 @Controller
 public class AuthorizeController {
@@ -24,8 +29,13 @@ public class AuthorizeController {
     @Value("${github.redirect.uri}")
     private String redirectUri;
 
+    @Autowired
+    private UserService userService;
+
     @GetMapping("/callback")
-    public String callback(@RequestParam(name="code") String code,@RequestParam(name="state") String state){
+    public String callback(@RequestParam(name="code") String code,
+                           @RequestParam(name="state") String state,
+                           HttpServletRequest request){
         AccessTokenDTO accessTokenDTO = new AccessTokenDTO();
         accessTokenDTO.setClient_id(clientId);
         accessTokenDTO.setClient_secret(clientSecret);
@@ -35,10 +45,22 @@ public class AuthorizeController {
 
         String accessToken=gitHubProvider.getAccessToken(accessTokenDTO);
         System.out.println(accessToken);
-        GitHubUser user=gitHubProvider.getUser(accessToken);
-
-        System.out.println(user.getName());
-        return "index";
+        GitHubUser gitHubUser=gitHubProvider.getUser(accessToken);
+        if(gitHubUser!=null){
+            User user=new User();
+            user.setToken(UUID.randomUUID().toString());
+            user.setName(gitHubUser.getName());
+            user.setAccount_id(String.valueOf(gitHubUser.getId()));
+            user.setGmt_create(System.currentTimeMillis());
+            user.setGmt_modified(user.getGmt_create());
+            userService.insertUser(user);
+            //登录成功，写cookie和session
+            request.getSession().setAttribute("user",user);
+            return "redirect:/";
+        }else{
+            //登录失败重新登录
+            return "redirect:/";
+        }
     }
 
 
